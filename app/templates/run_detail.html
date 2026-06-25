@@ -1,0 +1,27 @@
+{# Run detail page:
+   - live status and progress bar
+   - cancel button for active runs (manual/scheduled)
+   - real-time log output #}
+{% extends 'base.html' %}
+{% block content %}
+<section class="panel" data-run-id="{{ run.id }}" id="run-panel">
+  <h2>Run #{{ run.id }} / {{ target.name if target else run.target_id }}</h2>
+  <p><strong>Статус:</strong> <span id="run-status" class="pill {{ run.status }}">{{ run.status }}</span></p>
+  <p><strong>Тип запуска:</strong> {{ run.launch_type }}</p>
+  <p><strong>Шаг:</strong> <span id="run-step">{{ run.step }}</span></p>
+  <p><strong>Архив:</strong> <span id="run-archive">{{ run.archive_file or '-' }}</span></p>
+  <div class="progress-wrap"><div id="run-progress" class="progress" style="width: {{ run.progress }}%">{{ run.progress }}%</div></div>
+  {% if run.status in ['queued', 'running'] %}
+  <form method="post" action="/runs/{{ run.id }}/cancel" class="form-actions">
+    <button class="danger" type="submit">Отменить</button>
+  </form>
+  {% endif %}
+  <p id="run-error" class="error">{{ run.error_message }}</p>
+</section>
+
+<section class="panel">
+  <h2>Логи (real-time)</h2>
+  <pre id="run-logs" data-last-id="{% if logs %}{{ logs[-1].id }}{% else %}0{% endif %}">{% for l in logs %}[{{ l.created_at }}] {{ l.level|upper }} {{ l.message }}
+{% endfor %}</pre>
+</section>
+{% endblock %}

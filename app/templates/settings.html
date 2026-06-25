@@ -1,0 +1,102 @@
+{# Global notification settings page:
+   Telegram and Email are separated and have independent test actions. #}
+{% extends 'base.html' %}
+{% block content %}
+{% if flash %}
+<section class="panel">
+  <p>{{ flash }}</p>
+</section>
+{% endif %}
+<section class="panel">
+  <h2>Telegram</h2>
+  <form method="post" action="/settings/telegram" class="form-grid">
+    <label>Telegram URL (notifier server или BOT:TOKEN)
+      <input name="telegram_notifier_url" value="{{ settings.get('telegram_notifier_url', '') }}" placeholder="http://notifier.example/messages/telegram или 123456789:AA...">
+    </label>
+    <label>Telegram chat_id
+      <input name="telegram_chat_id" value="{{ settings.get('telegram_chat_id', '') }}">
+    </label>
+    <label>Telegram thread_id
+      <input name="telegram_thread_id" value="{{ settings.get('telegram_thread_id', '') }}">
+    </label>
+
+    <div class="form-actions">
+      <button type="submit">Сохранить</button>
+      <button type="submit" formaction="/settings/telegram/test" formmethod="post">Тест</button>
+    </div>
+  </form>
+</section>
+
+
+<section class="panel">
+  <h2>Выполнение задач</h2>
+  <form method="post" action="/settings/executor" class="form-grid">
+    <div>
+      <label for="max_concurrent_runs">Одновременное выполнение задач</label>
+      <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:8px;">
+        <input id="max_concurrent_runs" style="flex:1; min-width:260px; max-width:340px;" type="number" min="1" max="32" name="max_concurrent_runs" value="{{ settings.get('max_concurrent_runs', '3') }}">
+        <div class="form-actions" style="margin:0 0 1px 0;">
+          <button type="submit">Применить</button>
+        </div>
+      </div>
+      <small>По умолчанию: {{ default_max_concurrent_runs }}. Новое значение применяется к новым задачам, текущие запуски не прерываются.</small>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Локальные архивы</h2>
+  <form method="post" action="/settings/local-retention" class="form-grid">
+    <div>
+      <label for="local_retention_days">Локальный retention для архивов (дней)</label>
+      <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:8px;">
+        <input id="local_retention_days" style="flex:1; min-width:260px; max-width:340px;" type="number" min="1" name="local_retention_days" value="{{ settings.get('local_retention_days', '14') }}">
+        <div class="form-actions" style="margin:0 0 1px 0;">
+          <button type="submit">Применить</button>
+        </div>
+      </div>
+      <label class="toggle-line" style="margin-top:8px;">
+        <input type="checkbox" name="apply_to_all_targets"> Применить сейчас ко всем задачам
+      </label>
+      <small style="display:block; margin-top:8px;">Если чекбокс не отмечен, значение будет использоваться только как дефолт для новых задач.</small>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Email</h2>
+  <form method="post" action="/settings/email" class="form-grid form-single-column">
+    <label>SMTP host
+      <input name="smtp_host" value="{{ settings.get('smtp_host', '') }}">
+    </label>
+    <label>SMTP port
+      <input name="smtp_port" value="{{ settings.get('smtp_port', '587') }}">
+    </label>
+    <label>SMTP user
+      <input name="smtp_user" value="{{ settings.get('smtp_user', '') }}">
+    </label>
+    <label>SMTP password
+      <input type="password" name="smtp_password" value="{{ settings.get('smtp_password', '') }}">
+    </label>
+    <label>From
+      <input name="smtp_from" value="{{ settings.get('smtp_from', '') }}">
+    </label>
+    <label>To (через запятую)
+      <input name="smtp_to" value="{{ settings.get('smtp_to', '') }}">
+    </label>
+    {% set smtp_security = settings.get('smtp_security', 'starttls') %}
+    <label>Безопасность подключения
+      <select name="smtp_security">
+        <option value="none" {% if smtp_security == 'none' %}selected{% endif %}>Нет</option>
+        <option value="starttls" {% if smtp_security == 'starttls' %}selected{% endif %}>STARTTLS</option>
+        <option value="ssl_tls" {% if smtp_security == 'ssl_tls' %}selected{% endif %}>SSL/TLS</option>
+      </select>
+    </label>
+
+    <div class="form-actions">
+      <button type="submit">Сохранить</button>
+      <button type="submit" formaction="/settings/email/test" formmethod="post">Тест</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

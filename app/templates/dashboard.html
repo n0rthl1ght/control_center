@@ -1,0 +1,94 @@
+{# Dashboard page:
+   - top section: target list with bulk actions
+   - bottom section: recent runs with status and progress #}
+{% extends 'base.html' %}
+{% block content %}
+{% if flash %}
+<section class="panel">
+  <p>{{ flash }}</p>
+</section>
+{% endif %}
+<section class="panel">
+  <h2>Задачи</h2>
+  {# Bulk enable/disable actions are assembled in static/app.js and posted to /targets/bulk/status #}
+  <div class="actions bulk-actions">
+    <button type="button" id="bulk-activate">Активировать</button>
+    <button type="button" id="bulk-deactivate">Деактивировать</button>
+  </div>
+  <div class="table-scroll table-scroll-targets">
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="target-select-all"></th>
+          <th>№</th>
+          <th>ID</th>
+          <th>Имя</th>
+          <th>Тип источника</th>
+          <th>Хост</th>
+          <th>Режим</th>
+          <th>Базы</th>
+          <th>Cron</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in targets %}
+        <tr>
+          <td><input type="checkbox" class="target-select" value="{{ t.id }}"></td>
+          <td>{{ loop.index }}</td>
+          <td>{{ t.id }}</td>
+          <td>{{ t.name }} {% if not t.enabled %}<span class="pill off">disabled</span>{% endif %}</td>
+          <td>{{ t.db_type }}</td>
+          <td>{{ t.db_host }}:{{ t.db_port }}</td>
+          <td>{{ t.dump_mode }}</td>
+          <td>{{ t.databases_csv }}</td>
+          <td>{{ t.cron_expr or '-' }}</td>
+          <td class="actions">
+            <form action="/targets/{{ t.id }}/run" method="post"><button>Запустить</button></form>
+            <form action="/targets/{{ t.id }}/duplicate" method="post"><button>Дублировать</button></form>
+            <a class="btn" href="/targets/{{ t.id }}/edit">Изменить</a>
+            <form action="/targets/{{ t.id }}/delete" method="post" onsubmit="return confirm('Удалить задачу?');"><button class="danger">Удалить</button></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10">Задач пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form id="bulk-target-form" action="/targets/bulk/status" method="post" class="is-hidden"></form>
+</section>
+
+<section class="panel">
+  {# Recent runs feed (backend limit + CSS scrolling container) #}
+  <h2>Последние запуски (последние 20)</h2>
+  <div class="table-scroll table-scroll-runs">
+    <table>
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Имя</th>
+          <th>Статус</th>
+          <th>Прогресс</th>
+          <th>Этап</th>
+          <th>Время</th>
+        </tr>
+      </thead>
+      <tbody id="dashboard-runs-tbody" data-limit="20">
+        {% for r in runs %}
+        <tr>
+          <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td>
+          <td>{{ target_names.get(r.target_id, ('ID ' ~ r.target_id)) }}</td>
+          <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+          <td>{{ r.progress }}%</td>
+          <td>{{ r.step }}</td>
+          <td>{{ r.finished_at or r.started_at or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">Запусков пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

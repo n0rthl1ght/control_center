@@ -1,0 +1,78 @@
+services:
+  control-center:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${CC_CONTAINER_NAME:-backup-control-center}
+    restart: unless-stopped
+    ports:
+      - "${CC_PORT:-8090}:8090"
+    environment:
+      BACKUP_TZ: ${BACKUP_TZ:-Europe/Moscow}
+      TZ: ${BACKUP_TZ:-Europe/Moscow}
+      DEFAULT_RETENTION_DAYS: ${DEFAULT_RETENTION_DAYS:-14}
+      DEFAULT_BACKUP_ROOT: ${DEFAULT_BACKUP_ROOT:-/backups}
+      CONTROL_CENTER_DB_URL: ${CONTROL_CENTER_DB_URL:-sqlite:////app/data/control_center.db}
+      RCLONE_CONFIG: ${RCLONE_CONFIG:-/config/rclone/rclone.conf}
+      SSHPASS: ${SSHPASS:-}
+      STALE_PROCESS_KILL_SEC: ${STALE_PROCESS_KILL_SEC:-21600}
+    volumes:
+      # Option 1: store the service SQLite DB in a mounted host directory.
+      - ${HOST_APP_DATA_DIR:-./runtime/data}:/app/data:Z
+      # Write backups to an external host directory.
+      - ${HOST_BACKUPS_DIR:-./runtime/backups}:${CONTAINER_BACKUPS_DIR:-/backups}:Z
+      # Compatibility mount for legacy paths stored in existing jobs.
+      - ${HOST_BACKUPS_DIR:-./runtime/backups}:${CONTAINER_LEGACY_BACKUPS_DIR:-/home/user/Documents/DB}:Z
+      # Mount the rclone directory read-write: rclone creates temporary files next to rclone.conf.
+      - ${RCLONE_CONFIG_HOST_DIR:-./runtime/rclone}:/config/rclone:Z
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /root/.cache/rclone
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  control-center-dockerdb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${CC_DOCKERDB_CONTAINER_NAME:-backup-control-center-dockerdb}
+    restart: unless-stopped
+    profiles: ["dockerdb"]
+    ports:
+      - "${CC_DOCKERDB_PORT:-8091}:8090"
+    environment:
+      BACKUP_TZ: ${BACKUP_TZ:-Europe/Moscow}
+      TZ: ${BACKUP_TZ:-Europe/Moscow}
+      DEFAULT_RETENTION_DAYS: ${DEFAULT_RETENTION_DAYS:-14}
+      DEFAULT_BACKUP_ROOT: ${DEFAULT_BACKUP_ROOT:-/backups}
+      # Option 2: keep the service SQLite DB inside a Docker volume (no host bind mount).
+      CONTROL_CENTER_DB_URL: ${CONTROL_CENTER_DB_URL_DOCKERDB:-sqlite:////app/data/control_center.db}
+      RCLONE_CONFIG: ${RCLONE_CONFIG:-/config/rclone/rclone.conf}
+      SSHPASS: ${SSHPASS:-}
+      STALE_PROCESS_KILL_SEC: ${STALE_PROCESS_KILL_SEC:-21600}
+    volumes:
+      - control_center_data:/app/data
+      # Write backups to an external host directory.
+      - ${HOST_BACKUPS_DIR:-./runtime/backups}:${CONTAINER_BACKUPS_DIR:-/backups}:Z
+      # Compatibility mount for legacy paths stored in existing jobs.
+      - ${HOST_BACKUPS_DIR:-./runtime/backups}:${CONTAINER_LEGACY_BACKUPS_DIR:-/home/user/Documents/DB}:Z
+      # Mount the rclone directory read-write: rclone creates temporary files next to rclone.conf.
+      - ${RCLONE_CONFIG_HOST_DIR:-./runtime/rclone}:/config/rclone:Z
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /root/.cache/rclone
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  control_center_data:

@@ -1,0 +1,126 @@
+{# Restic page:
+   - global retention settings and mass-apply action
+   - queue of completed runs available for Restic send
+   - snapshot list with filtering #}
+{% extends 'base.html' %}
+{% block content %}
+{% if flash %}
+<section class="panel">
+  <p>{{ flash }}</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Restic настройки</h2>
+  <form method="post" action="/restic/retention" class="form-grid">
+    <div class="form-actions retention-actions">
+      <label>Автоудаление снапшотов для всех задач (дней)
+        <input type="number" min="1" name="restic_keep_within_days" value="{{ settings.get('restic_keep_within_days', '30') }}">
+      </label>
+      <button type="submit">Применить</button>
+    </div>
+    <label class="toggle-line field-full"><input type="checkbox" name="apply_now"> Применить сейчас ко всем задачам с Restic</label>
+  </form>
+</section>
+
+<section class="panel" id="restic-queue-panel">
+  <h2>Очередь отправки в Restic (из завершенных запусков)</h2>
+  <form method="get" action="/restic" class="form-actions compact-actions">
+    <input type="hidden" name="target_id" value="{{ selected_target.id if selected_target else '' }}">
+    <label>Фильтр по имени
+      <input type="text" id="restic-queue-filter-input" name="queue_filter" value="{{ queue_filter or '' }}" placeholder="Например, app">
+    </label>
+    <input type="hidden" name="snapshot_filter" value="{{ snapshot_filter or '' }}">
+    <button type="submit">Применить</button>
+    <a href="/restic{% if selected_target %}?target_id={{ selected_target.id }}{% endif %}" class="btn">Сброс</a>
+  </form>
+  <div class="table-scroll table-scroll-restic-queue">
+    <table>
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Имя</th>
+          <th>Статус run</th>
+          <th>Restic</th>
+          <th>Snapshot</th>
+          <th>Репозиторий</th>
+          <th>Архив</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody id="restic-queue-tbody" data-limit="200">
+        {% for r in runs %}
+        <tr>
+          <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td>
+          <td>{{ r.target_name }}</td>
+          <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+          <td>{{ r.restic_status or '-' }}</td>
+          <td>{{ r.restic_snapshot_id or '-' }}</td>
+          <td>{{ r.repository or '-' }}</td>
+          <td>{{ r.archive_or_dir or '-' }}</td>
+          <td class="actions">
+            {% if r.has_payload and r.status == 'success' %}
+            <form method="post" action="/restic/runs/{{ r.id }}/send">
+              <button type="submit">Отправить</button>
+            </form>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">Нет завершенных запусков.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="restic-snapshots-panel" data-target-id="{{ selected_target.id if selected_target else '' }}">
+  <h2>Снапшоты Restic</h2>
+  <form method="get" action="/restic" class="form-grid" id="restic-snapshots-filter-form">
+    <label>Репозиторий
+      <select name="target_id" id="restic-snapshots-target-id">
+        {% for t in targets %}
+        <option value="{{ t.id }}" {% if selected_target and t.id == selected_target.id %}selected{% endif %}>{{ t.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Фильтр по названию/содержимому
+      <input type="text" name="snapshot_filter" id="restic-snapshots-filter-input" value="{{ snapshot_filter or '' }}" placeholder="Имя цели, ID, tag, path">
+    </label>
+    <input type="hidden" name="queue_filter" value="{{ queue_filter or '' }}">
+    <div class="form-actions">
+      <button type="submit">Обновить</button>
+      <a href="/restic{% if selected_target %}?target_id={{ selected_target.id }}{% endif %}" class="btn">Сброс</a>
+    </div>
+  </form>
+  <div class="section-gap"></div>
+  <p id="restic-snapshots-info">{{ snapshots_info }}</p>
+  <p class="error" id="restic-snapshots-error">{{ snapshots_error }}</p>
+  <div class="table-scroll table-scroll-restic-snapshots">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Время</th>
+          <th>Пути</th>
+          <th>Теги</th>
+        </tr>
+      </thead>
+      <tbody id="restic-snapshots-tbody">
+        {% for s in snapshots %}
+        <tr>
+          <td>{{ s.get('short_id') or s.get('id', '-') }}</td>
+          <td>{{ s.get('time', '-') }}</td>
+          <td>{{ (s.get('paths') or []) | join(', ') }}</td>
+          <td>{{ (s.get('tags') or []) | join(', ') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">Снапшоты не найдены.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

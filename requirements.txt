@@ -1,0 +1,7 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+SQLAlchemy==2.0.43
+Jinja2==3.1.6
+python-multipart==0.0.20
+APScheduler==3.11.0
+requests==2.32.5

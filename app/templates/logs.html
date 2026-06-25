@@ -1,0 +1,46 @@
+{# Logs page:
+   - run history table
+   - live log feed for the selected run ID #}
+{% extends 'base.html' %}
+{% block content %}
+<section class="panel">
+  <h2>История запусков</h2>
+  <div class="table-scroll table-scroll-history">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Имя</th>
+          <th>Status</th>
+          <th>Start</th>
+          <th>Finish</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody id="logs-history-tbody" data-limit="100">
+        {% for r in runs %}
+        <tr>
+          <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td>
+          <td>{{ target_names.get(r.target_id, ('ID ' ~ r.target_id)) }}</td>
+          <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+          <td>{{ r.started_at or '-' }}</td>
+          <td>{{ r.finished_at or '-' }}</td>
+          <td>{{ r.error_message or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">Нет данных.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="live-logs-panel" data-run-id="{% if runs %}{{ runs[0].id }}{% else %}0{% endif %}">
+  <h2>Live Logs</h2>
+  {# The frontend polls /api/runs/{id}/status and /api/runs/{id}/logs every 2 seconds. #}
+  <label>Run ID для realtime-ленты
+    <input id="live-run-id" type="number" min="1" value="{% if runs %}{{ runs[0].id }}{% else %}1{% endif %}">
+  </label>
+  <pre id="live-run-logs" data-last-id="0"></pre>
+</section>
+{% endblock %}

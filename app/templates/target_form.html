@@ -1,0 +1,395 @@
+{# Target create/edit form:
+   dynamic fields are switched by the inline JS below depending on DB type/mode. #}
+{% extends 'base.html' %}
+{% block content %}
+{% if flash %}
+<section class="panel">
+  <p>{{ flash }}</p>
+</section>
+{% endif %}
+<section class="panel">
+  <h2>{% if target %}Редактировать{% else %}Новый бэкап{% endif %}</h2>
+  <form method="post" action="{% if target %}/targets/{{ target.id }}{% else %}/targets{% endif %}" class="form-stack" id="target-form">
+    <div class="form-section">
+      <h3>Общее</h3>
+      {# Primary task parameters: name, DB type, mode, and activation. #}
+      <div class="form-grid general-grid">
+        <label>Имя
+          <input name="name" value="{{ target.name if target else '' }}" required>
+        </label>
+        <label>Тип источника
+          <select name="db_type" id="db-type-select" required>
+            <option value="postgresql" {% if target and target.db_type == 'postgresql' or not target %}selected{% endif %}>PostgreSQL</option>
+            <option value="mysql" {% if target and target.db_type == 'mysql' %}selected{% endif %}>MySQL</option>
+            <option value="mongodb" {% if target and target.db_type == 'mongodb' %}selected{% endif %}>MongoDB</option>
+            <option value="docker" {% if target and target.db_type == 'docker' %}selected{% endif %}>Docker</option>
+          </select>
+        </label>
+        <label class="field-dump-mode field-animated">Режим дампа
+          <select name="dump_mode" id="dump-mode-select">
+            <option value="full" id="dump-mode-full" {% if target and target.dump_mode == 'full' or not target %}selected{% endif %}>full</option>
+            <option value="split_excluded_tables" id="dump-mode-split" {% if target and target.dump_mode == 'split_excluded_tables' %}selected{% endif %}>split_excluded_tables</option>
+            <option value="custom_excludes" id="dump-mode-pg-custom" {% if target and target.dump_mode == 'custom_excludes' %}selected{% endif %}>custom_excludes</option>
+            <option value="latest_collection_groups" id="dump-mode-mongo-latest" {% if target and target.dump_mode == 'latest_collection_groups' %}selected{% endif %}>latest_collection_groups</option>
+          </select>
+        </label>
+        <label class="toggle-line general-activation"><input type="checkbox" name="enabled" {% if target and target.enabled or not target %}checked{% endif %}> Активация</label>
+      </div>
+    </div>
+
+    <div class="form-section field-animated" id="db-settings-section">
+      <h3>Настройки БД</h3>
+      {# Dump parameters that depend on DB type (PostgreSQL/MySQL/MongoDB). #}
+      <div class="form-grid db-grid">
+        <label class="db-host">DB Host
+          <input name="db_host" value="{{ target.db_host if target else '127.0.0.1' }}" required>
+        </label>
+        <label class="db-port">DB Port
+          <input type="number" name="db_port" value="{{ target.db_port if target else 5432 }}" required>
+        </label>
+        <label class="db-user">DB User
+          <input name="db_user" value="{{ target.db_user if target else '' }}">
+        </label>
+        <label class="db-password">DB Password
+          <input type="password" name="db_password" value="{{ target.db_password if target else '' }}">
+        </label>
+        <label class="field-databases db-main-list"><span id="databases-label">Список баз (через запятую)</span>
+          <input name="databases_csv" id="databases-input" value="{{ target.databases_csv if target else '' }}" placeholder="db1,db2">
+        </label>
+        <label class="field-split field-animated db-split"><span id="split-label">Таблицы для split-режима (через запятую)</span>
+          <input name="split_tables_csv" value="{{ target.split_tables_csv if target else '' }}" placeholder="events_event,issues_issue">
+        </label>
+        <label class="field-pg-custom field-animated db-pg-exclude-table">PostgreSQL: exclude-table (через запятую)
+          <input name="pg_exclude_tables_csv" value="{{ target.pg_exclude_tables_csv if target else '' }}" placeholder="public.big_table,events_*">
+        </label>
+        <label class="field-pg-custom field-animated db-pg-exclude-table-data">PostgreSQL: exclude-table-data (через запятую)
+          <input name="pg_exclude_table_data_csv" value="{{ target.pg_exclude_table_data_csv if target else '' }}" placeholder="public.audit_log,metrics_*">
+        </label>
+        <label class="field-pg-custom field-animated db-pg-exclude-schema">PostgreSQL: exclude-schema (через запятую)
+          <input name="pg_exclude_schemas_csv" value="{{ target.pg_exclude_schemas_csv if target else '' }}" placeholder="*_timescaledb_internal*">
+        </label>
+        <label class="field-mongo-latest field-animated db-mongo-prefixes">Префиксы групп MongoDB (через запятую)
+          <input name="mongo_group_prefixes_csv" value="{{ target.mongo_group_prefixes_csv if target else 'requests,responses' }}" placeholder="requests,responses">
+        </label>
+        <label class="field-mongo-latest field-animated db-mongo-mode">Шаблон имени группы MongoDB
+          <select name="mongo_group_name_mode" id="mongo-group-name-mode">
+            <option value="simple" {% if target and target.mongo_group_name_mode == 'simple' or not target %}selected{% endif %}>simple: prefix_suffix</option>
+            <option value="multipart" {% if target and target.mongo_group_name_mode == 'multipart' %}selected{% endif %}>multipart: prefix_suffix.part</option>
+          </select>
+        </label>
+        <label class="field-mongo-latest field-animated db-mongo-parts">Части multipart-группы (через запятую)
+          <input name="mongo_collection_parts_csv" id="mongo-collection-parts" value="{{ target.mongo_collection_parts_csv if target else '' }}" placeholder="files,chunks">
+        </label>
+        <label class="field-mongo-latest field-animated db-mongo-count">Количество последних групп
+          <input type="number" min="1" name="mongo_latest_group_count" value="{{ target.mongo_latest_group_count if target else 3 }}">
+        </label>
+        <label class="field-mongo-latest field-animated db-mongo-blacklist">Blacklist коллекций/суффиксов
+          <input name="mongo_collection_blacklist_csv" value="{{ target.mongo_collection_blacklist_csv if target else '' }}" placeholder="responses_900,requests_900,900">
+        </label>
+        <label class="field-mysql field-animated db-ignore">Ignore-table (через запятую, напр. app_main.audit_log,app_main.event_queue)
+          <input name="mysql_ignore_tables_csv" value="{{ target.mysql_ignore_tables_csv if target else '' }}" placeholder="app_main.audit_log,app_main.event_queue">
+        </label>
+        <label class="field-mysql field-animated db-view-schema">Таблицы для schema-only (через запятую)
+          <input name="mysql_structure_tables_csv" value="{{ target.mysql_structure_tables_csv if target else 'audit_log,event_queue' }}" placeholder="audit_log,event_queue">
+        </label>
+        <label class="field-mysql field-animated toggle-line db-ssh-toggle"><input type="checkbox" id="mysql-use-ssh" name="mysql_use_ssh" {% if target and target.mysql_use_ssh %}checked{% endif %}> Выполнять дамп по SSH</label>
+      </div>
+    </div>
+
+    <div class="form-section field-animated is-hidden" id="docker-settings-section">
+      <h3>Docker / Compose Project</h3>
+      <div class="form-grid">
+        <label class="field-docker field-animated">PROJECT_HOST_DIR
+          <input name="docker_project_host_dir" value="{{ target.docker_project_host_dir if target else '' }}" placeholder="/opt/projects/example_app">
+        </label>
+        <label class="field-docker field-animated">PROJECT_NAME
+          <input id="docker-project-name-preview" value="{{ target.docker_project_name if target else '' }}" placeholder="Будет определен из PROJECT_HOST_DIR" readonly>
+        </label>
+        <label class="field-docker field-animated">Compose file name (опционально)
+          <input name="docker_compose_file" value="{{ target.docker_compose_file if target else '' }}" placeholder="promtail-local-config.yaml">
+        </label>
+        <label class="field-docker field-animated field-full">Exclude patterns (через запятую)
+          <input name="docker_excludes_csv" value="{{ target.docker_excludes_csv if target else '.venv,__pycache__,*.pyc,node_modules' }}" placeholder=".venv,__pycache__,*.pyc,node_modules">
+        </label>
+        <label class="field-docker field-animated toggle-line field-full">
+          <input type="checkbox" name="docker_stop_before_backup" {% if target and target.docker_stop_before_backup %}checked{% endif %}>
+          Останавливать Docker Compose перед бэкапом (`docker compose down` -> бэкап -> `docker compose up -d`)
+        </label>
+        <label class="field-docker field-animated toggle-line field-full">
+          <input type="checkbox" name="docker_use_sudo" {% if target and target.docker_use_sudo %}checked{% endif %}>
+          Использовать `sudo -n` для Docker-команд и архивации
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section field-animated is-hidden" id="remote-ssh-section">
+      <h3>Remote SSH</h3>
+      {# Shown for MySQL in SSH mode and for Docker backups. #}
+      <div class="form-grid">
+        <label class="field-remote-ssh field-animated">SSH host
+          <input name="remote_ssh_host" value="{{ target.remote_ssh_host if target and target.remote_ssh_host else (target.mysql_ssh_host if target else '') }}" placeholder="example.internal">
+        </label>
+        <label class="field-remote-ssh field-animated">SSH port
+          <input type="number" name="remote_ssh_port" value="{{ target.remote_ssh_port if target and target.remote_ssh_port else (target.mysql_ssh_port if target else 22) }}">
+        </label>
+        <label class="field-remote-ssh field-animated">SSH user
+          <input name="remote_ssh_user" value="{{ target.remote_ssh_user if target and target.remote_ssh_user else (target.mysql_ssh_user if target else '') }}" placeholder="backup-user">
+        </label>
+        {% set remote_auth_type = target.remote_ssh_auth_type if target and target.remote_ssh_auth_type else (target.mysql_ssh_auth_type if target else 'password') %}
+        <label class="field-remote-ssh field-animated">SSH auth type
+          <select name="remote_ssh_auth_type" id="remote-ssh-auth-type">
+            <option value="password" {% if not target or remote_auth_type == 'password' %}selected{% endif %}>password</option>
+            <option value="private_key" {% if target and (remote_auth_type == 'private_key' or target.remote_ssh_private_key or target.mysql_ssh_private_key or target.mysql_ssh_key_path) %}selected{% endif %}>private_key</option>
+          </select>
+        </label>
+        <label class="field-remote-ssh field-animated field-remote-ssh-password">SSH password
+          <input type="password" name="remote_ssh_password" value="{{ target.remote_ssh_password if target and target.remote_ssh_password else (target.mysql_ssh_password if target else '') }}" placeholder="optional">
+        </label>
+        <label class="field-remote-ssh field-animated field-remote-ssh-private-key">SSH private key
+          <textarea name="remote_ssh_private_key" rows="8" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----">{{ target.remote_ssh_private_key if target and target.remote_ssh_private_key else (target.mysql_ssh_private_key if target else '') }}</textarea>
+          {% if target and target.mysql_ssh_key_path and not target.mysql_ssh_private_key %}
+          <small>Для этой задачи ранее был сохранен legacy key path на сервере control center. Если не вставлять новый ключ, он будет сохранен до следующего изменения.</small>
+          {% endif %}
+        </label>
+        <label class="field-remote-ssh field-animated">Remote tmp dir
+          <input name="remote_ssh_remote_tmp_dir" value="{{ target.remote_ssh_remote_tmp_dir if target and target.remote_ssh_remote_tmp_dir else (target.mysql_ssh_remote_tmp_dir if target else '/tmp/backup_control_center') }}" placeholder="/tmp/backup_control_center">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Сохранение и расписание</h3>
+      {# Storage path, retention, transfer limit, notifications, and Restic. #}
+      <div class="form-grid storage-grid">
+        <label class="storage-path">Путь хранения
+          <input name="backup_root" value="{{ target.backup_root if target else '' }}" placeholder="{{ default_backup_root }}" required>
+        </label>
+        <label class="toggle-line storage-archive"><input type="checkbox" name="archive_enabled" {% if target and target.archive_enabled or not target %}checked{% endif %}> Архивировать</label>
+        <label class="storage-retention">Retention (days)
+          <input type="number" name="retention_days" min="1" value="{{ target.retention_days if target else default_retention }}" required>
+        </label>
+        <label class="storage-limit">Лимит копирования (KB/s, 0 = без лимита)
+          <input type="number" name="transfer_limit_kbps" min="0" value="{{ target.transfer_limit_kbps if target else 0 }}">
+        </label>
+        <label class="storage-cron">Cron (опционально)
+          <input name="cron_expr" value="{{ target.cron_expr if target else '' }}" placeholder="0 3 * * *">
+        </label>
+        <label class="toggle-line field-full"><input type="checkbox" id="restic-enabled" name="restic_enabled" {% if target and target.restic_enabled %}checked{% endif %}> Отправлять в Restic</label>
+        <label class="field-restic field-animated">Restic Repository
+          <input name="restic_repository" value="{{ target.restic_repository if target else '' }}" placeholder="sftp:user@host:/repo или /path/to/repo">
+        </label>
+        <label class="field-restic field-animated">Restic Password
+          <input type="password" name="restic_password" value="{{ target.restic_password if target else '' }}">
+        </label>
+        <label class="field-restic field-animated">Автоудаление снапшотов Restic (дней)
+          <input type="number" min="1" name="restic_keep_within_days" value="{{ target.restic_keep_within_days if target else restic_default_keep_within_days|default(30) }}">
+        </label>
+        <div class="toggle-row field-full notify-row">
+          <label class="toggle-line"><input type="checkbox" name="telegram_enabled" {% if target and target.telegram_enabled or not target %}checked{% endif %}> Телеграм</label>
+          <label class="toggle-line"><input type="checkbox" name="email_enabled" {% if target and target.email_enabled %}checked{% endif %}> Email</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit">Сохранить</button>
+      <a class="btn" href="/">Отмена</a>
+    </div>
+  </form>
+</section>
+<script>
+// Dynamic form behavior:
+// - toggles DB-specific fields
+// - updates labels/defaults for the selected DB type
+// - shows/hides split mode and restic/ssh sections
+(() => {
+  const typeSelect = document.getElementById("db-type-select");
+  const portInput = document.querySelector('input[name="db_port"]');
+  const dockerProjectHostDirInput = document.querySelector('input[name="docker_project_host_dir"]');
+  const dockerProjectNamePreview = document.getElementById("docker-project-name-preview");
+  const dbSettingsSection = document.getElementById("db-settings-section");
+  const dockerSettingsSection = document.getElementById("docker-settings-section");
+  const mongoFields = document.querySelectorAll(".field-mongo");
+  const mongoLatestFields = document.querySelectorAll(".field-mongo-latest");
+  const mysqlFields = document.querySelectorAll(".field-mysql");
+  const remoteSshFields = document.querySelectorAll(".field-remote-ssh");
+  const remoteSshSection = document.getElementById("remote-ssh-section");
+  const dockerFields = document.querySelectorAll(".field-docker");
+  const mysqlUseSsh = document.getElementById("mysql-use-ssh");
+  const remoteSshAuthType = document.getElementById("remote-ssh-auth-type");
+  const remoteSshPasswordFields = document.querySelectorAll(".field-remote-ssh-password");
+  const remoteSshPrivateKeyFields = document.querySelectorAll(".field-remote-ssh-private-key");
+  const splitField = document.querySelector(".field-split");
+  const pgCustomFields = document.querySelectorAll(".field-pg-custom");
+  const dumpModeField = document.querySelector(".field-dump-mode");
+  const dbLabel = document.getElementById("databases-label");
+  const splitLabel = document.getElementById("split-label");
+  const dumpMode = document.getElementById("dump-mode-select");
+  const dumpModeSplit = document.getElementById("dump-mode-split");
+  const dumpModePgCustom = document.getElementById("dump-mode-pg-custom");
+  const dumpModeMongoLatest = document.getElementById("dump-mode-mongo-latest");
+  const mongoGroupNameMode = document.getElementById("mongo-group-name-mode");
+  const mongoCollectionParts = document.getElementById("mongo-collection-parts");
+  const resticEnabled = document.getElementById("restic-enabled");
+  const resticFields = document.querySelectorAll(".field-restic");
+
+  const defaults = { postgresql: 5432, mysql: 3306, mongodb: 27017, docker: 22 };
+
+  const deriveProjectName = (rawPath) => {
+    const cleaned = String(rawPath || "").trim().replace(/[\\/]+$/, "");
+    if (!cleaned) return "";
+    const parts = cleaned.split(/[\\/]+/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : "";
+  };
+  const setSectionVisible = (el, visible) => {
+    if (!el) return;
+    el.hidden = !visible;
+    el.classList.toggle("is-hidden", !visible);
+  };
+
+  const applyType = () => {
+    const t = typeSelect.value;
+    const isMongo = t === "mongodb";
+    const isMySQL = t === "mysql";
+    const isPostgres = t === "postgresql";
+    const isDocker = t === "docker";
+    const isMongoLatest = isMongo && dumpMode.value === "latest_collection_groups";
+    const isMongoSplit = isMongo && dumpMode.value === "split_excluded_tables";
+    const isMongoMultipart = isMongoLatest && mongoGroupNameMode && mongoGroupNameMode.value === "multipart";
+
+    setSectionVisible(dbSettingsSection, !isDocker);
+    setSectionVisible(dockerSettingsSection, isDocker);
+    for (const el of dockerFields) {
+      el.classList.toggle("is-hidden", !isDocker);
+    }
+    if (dockerProjectNamePreview && dockerProjectHostDirInput) {
+      dockerProjectNamePreview.value = deriveProjectName(dockerProjectHostDirInput.value);
+    }
+
+    for (const el of mongoFields) {
+      el.classList.toggle("is-hidden", !isMongo);
+    }
+    for (const el of mongoLatestFields) {
+      el.classList.toggle("is-hidden", !isMongoLatest);
+    }
+    if (mongoCollectionParts) {
+      mongoCollectionParts.closest("label").classList.toggle("is-hidden", !isMongoMultipart);
+    }
+    for (const el of mysqlFields) {
+      el.classList.toggle("is-hidden", !isMySQL);
+    }
+    if (dumpModeField) {
+      dumpModeField.classList.toggle("is-hidden", isMySQL || isDocker);
+    }
+    const useSsh = isDocker || !!(mysqlUseSsh && mysqlUseSsh.checked);
+    for (const el of remoteSshFields) {
+      el.classList.toggle("is-hidden", !(useSsh && (isMySQL || isDocker)));
+    }
+    setSectionVisible(remoteSshSection, useSsh && (isMySQL || isDocker));
+    const authType = remoteSshAuthType ? remoteSshAuthType.value : "password";
+    for (const el of remoteSshPasswordFields) {
+      el.classList.toggle("is-hidden", !(useSsh && (isMySQL || isDocker)) || authType !== "password");
+    }
+    for (const el of remoteSshPrivateKeyFields) {
+      el.classList.toggle("is-hidden", !(useSsh && (isMySQL || isDocker)) || authType !== "private_key");
+    }
+    const splitModeSelected = dumpMode.value === "split_excluded_tables";
+    const pgCustomSelected = dumpMode.value === "custom_excludes";
+    const showSplit = (isMongo && !isMongoLatest) || (isPostgres && splitModeSelected);
+    if (splitField) splitField.classList.toggle("is-hidden", !showSplit);
+    for (const el of pgCustomFields) {
+      el.classList.toggle("is-hidden", !(isPostgres && pgCustomSelected));
+    }
+
+    if (isMySQL) {
+      dbLabel.textContent = "Основные БД MySQL (через запятую)";
+      splitLabel.textContent = "Не используется для MySQL";
+      if (dumpModeSplit) {
+        dumpModeSplit.disabled = true;
+        dumpModeSplit.hidden = true;
+      }
+      if (dumpModePgCustom) {
+        dumpModePgCustom.disabled = true;
+        dumpModePgCustom.hidden = true;
+      }
+      if (dumpModeMongoLatest) {
+        dumpModeMongoLatest.disabled = true;
+        dumpModeMongoLatest.hidden = true;
+      }
+      dumpMode.value = "full";
+    } else if (isDocker) {
+      if (dumpModeSplit) {
+        dumpModeSplit.disabled = true;
+        dumpModeSplit.hidden = true;
+      }
+      if (dumpModePgCustom) {
+        dumpModePgCustom.disabled = true;
+        dumpModePgCustom.hidden = true;
+      }
+      if (dumpModeMongoLatest) {
+        dumpModeMongoLatest.disabled = true;
+        dumpModeMongoLatest.hidden = true;
+      }
+      dumpMode.value = "full";
+    } else if (isMongo) {
+      dbLabel.textContent = "Список баз MongoDB (через запятую)";
+      splitLabel.textContent = isMongoSplit ? "Коллекции (MongoDB, через запятую)" : "Коллекции для выборочного дампа (MongoDB, через запятую)";
+      if (dumpModeSplit) {
+        dumpModeSplit.disabled = false;
+        dumpModeSplit.hidden = false;
+      }
+      if (dumpModePgCustom) {
+        dumpModePgCustom.disabled = true;
+        dumpModePgCustom.hidden = true;
+        if (dumpMode.value === "custom_excludes") {
+          dumpMode.value = "full";
+        }
+      }
+      if (dumpModeMongoLatest) {
+        dumpModeMongoLatest.disabled = false;
+        dumpModeMongoLatest.hidden = false;
+      }
+      if (mongoGroupNameMode && !mongoGroupNameMode.value) {
+        mongoGroupNameMode.value = "simple";
+      }
+    } else {
+      dbLabel.textContent = "Список баз (через запятую)";
+      splitLabel.textContent = "Таблицы для split-режима (через запятую)";
+      if (dumpModeSplit) {
+        dumpModeSplit.disabled = false;
+        dumpModeSplit.hidden = false;
+      }
+      if (dumpModePgCustom) {
+        dumpModePgCustom.disabled = false;
+        dumpModePgCustom.hidden = false;
+      }
+      if (dumpModeMongoLatest) {
+        dumpModeMongoLatest.disabled = true;
+        dumpModeMongoLatest.hidden = true;
+        if (dumpMode.value === "latest_collection_groups") {
+          dumpMode.value = "full";
+        }
+      }
+    }
+
+    if (!portInput.value || portInput.value === "5432" || portInput.value === "3306" || portInput.value === "27017" || portInput.value === "22") {
+      portInput.value = String(defaults[t]);
+    }
+
+    const showRestic = !!(resticEnabled && resticEnabled.checked);
+    for (const el of resticFields) {
+      el.classList.toggle("is-hidden", !showRestic);
+    }
+  };
+
+  typeSelect.addEventListener("change", applyType);
+  dumpMode.addEventListener("change", applyType);
+  if (dockerProjectHostDirInput) dockerProjectHostDirInput.addEventListener("input", applyType);
+  if (mongoGroupNameMode) mongoGroupNameMode.addEventListener("change", applyType);
+  if (mysqlUseSsh) mysqlUseSsh.addEventListener("change", applyType);
+  if (remoteSshAuthType) remoteSshAuthType.addEventListener("change", applyType);
+  if (resticEnabled) resticEnabled.addEventListener("change", applyType);
+  applyType();
+})();
+</script>
+{% endblock %}
